@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.initialxy.cordova.themeablebrowser;
+package com.mbpscd.cordova.themeablebrowser;
 
 import org.json.JSONArray;
 import org.json.JSONException;

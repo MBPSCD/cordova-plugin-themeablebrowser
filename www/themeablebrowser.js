@@ -1,3 +1,4 @@
+cordova.define("cordova-plugin-themeablebrowser.themeablebrowser", function(require, exports, module) {
 /*
  *
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -80,6 +81,11 @@ ThemeableBrowser.prototype = {
             throw new Error('insertCSS requires exactly one of code or file to be specified');
         }
         return this;
+    },
+
+    setCollectStatus: function(status, cb){
+        exec(cb, null, 'ThemeableBrowser', 'setCollectStatus', [status]);
+        return this;
     }
 };
 
@@ -117,3 +123,4 @@ exports.ERR_CRITICAL = 'critical';
 exports.ERR_LOADFAIL = 'loadfail';
 exports.WRN_UNEXPECTED = 'unexpected';
 exports.WRN_UNDEFINED = 'undefined';
+});

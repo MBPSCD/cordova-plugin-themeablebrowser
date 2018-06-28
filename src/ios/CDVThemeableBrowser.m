@@ -54,9 +54,17 @@
 #define    kThemeableBrowserEmitCodeUnexpected @"unexpected"
 #define    kThemeableBrowserEmitCodeUndefined @"undefined"
 
-#define    TOOLBAR_DEF_HEIGHT 44.0
+#define    TOOLBAR_DEF_HEIGHT_PERCENT 11.7
 #define    LOCATIONBAR_HEIGHT 21.0
 #define    FOOTER_HEIGHT ((TOOLBAR_HEIGHT) + (LOCATIONBAR_HEIGHT))
+
+#define    SCREEN_WIDTH  [UIScreen mainScreen].bounds.size.width
+#define    SCREEN_HEIGHT [UIScreen mainScreen].bounds.size.height
+
+#define    TITLE_FONT_SIZE 16
+#define    LEFT_BUTTON_SPACE 0         //左边button间距
+#define    LEFT_BUTTON_START_MARGIN 0  //左边button起始左边距
+#define    TITLELBL_LEFT_OFFSET 20      //标题label左偏移量（离关闭按钮的距离）
 
 #pragma mark CDVThemeableBrowser
 
@@ -95,6 +103,9 @@
 {
     [self close:nil];
 }
+
+
+
 
 - (void)close:(CDVInvokedUrlCommand*)command
 {
@@ -161,6 +172,19 @@
 
     [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
+}
+
+
+- (void)setCollectStatus:(CDVInvokedUrlCommand *)command{
+
+    BOOL collected = (BOOL)[command argumentAtIndex:2][0];
+
+    if (self.themeableBrowserViewController) {
+        [self.themeableBrowserViewController changeCollectStaus:collected];
+    }
+
+
+
 }
 
 - (void)reload:(CDVInvokedUrlCommand*)command
@@ -642,6 +666,13 @@
 
 @synthesize currentURL;
 
+- (NSMutableArray *)rightButtons {
+    if (!_rightButtons) {
+        _rightButtons = [[NSMutableArray alloc] init];
+    }
+    return _rightButtons;
+}
+
 - (id)initWithUserAgent:(NSString*)userAgent prevUserAgent:(NSString*)prevUserAgent browserOptions: (CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle
 {
     self = [super init];
@@ -669,12 +700,16 @@
     CGRect webViewBounds = self.view.bounds;
     BOOL toolbarIsAtBottom = ![_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop];
     NSDictionary* toolbarProps = _browserOptions.toolbar;
-    CGFloat toolbarHeight = [self getFloatFromDict:toolbarProps withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
+    CGFloat toolbarPercentValue = [self getFloatFromDict:toolbarProps withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT_PERCENT];
+    CGFloat toolbarHeight = [self getToolbarHeightWithPercentValue:toolbarPercentValue];
+
     if (!_browserOptions.fullscreen) {
         webViewBounds.size.height -= toolbarHeight;
+        webViewBounds.size.height -= [self statusBarHeight];
+        webViewBounds.origin.y = [self statusBarHeight] + toolbarHeight;
     }
-    self.webView = [[UIWebView alloc] initWithFrame:webViewBounds];
 
+    self.webView = [[UIWebView alloc] initWithFrame:webViewBounds];
     self.webView.autoresizingMask = (UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight);
 
     [self.view addSubview:self.webView];
@@ -707,7 +742,7 @@
     [self.spinner stopAnimating];
 
     CGFloat toolbarY = toolbarIsAtBottom ? self.view.bounds.size.height - toolbarHeight : 0.0;
-    CGRect toolbarFrame = CGRectMake(0.0, toolbarY, self.view.bounds.size.width, toolbarHeight);
+    CGRect toolbarFrame = CGRectMake(0.0, toolbarY, self.view.bounds.size.width, toolbarHeight + [self statusBarHeight]);
 
     self.toolbar = [[UIView alloc] initWithFrame:toolbarFrame];
     self.toolbar.alpha = 1.000;
@@ -769,8 +804,9 @@
     self.addressLabel.textColor = [UIColor colorWithWhite:1.000 alpha:1.000];
     self.addressLabel.userInteractionEnabled = NO;
 
-    self.closeButton = [self createButton:_browserOptions.closeButton action:@selector(close) withDescription:@"close button"];
+    
     self.backButton = [self createButton:_browserOptions.backButton action:@selector(goBack:) withDescription:@"back button"];
+    self.closeButton = [self createButton:_browserOptions.closeButton action:@selector(close) withDescription:@"close button"];
     self.forwardButton = [self createButton:_browserOptions.forwardButton action:@selector(goForward:) withDescription:@"forward button"];
     self.menuButton = [self createButton:_browserOptions.menu action:@selector(goMenu:) withDescription:@"menu button"];
 
@@ -778,21 +814,13 @@
     CGFloat leftWidth = 0;
     CGFloat rightWidth = 0;
 
+    leftWidth += LEFT_BUTTON_START_MARGIN;
+
     // Both left and right side buttons will be ordered from outside to inside.
     NSMutableArray* leftButtons = [NSMutableArray new];
     NSMutableArray* rightButtons = [NSMutableArray new];
 
-    if (self.closeButton) {
-        CGFloat width = [self getWidthFromButton:self.closeButton];
 
-        if ([kThemeableBrowserAlignRight isEqualToString:_browserOptions.closeButton[kThemeableBrowserPropAlign]]) {
-            [rightButtons addObject:self.closeButton];
-            rightWidth += width;
-        } else {
-            [leftButtons addObject:self.closeButton];
-            leftWidth += width;
-        }
-    }
 
     if (self.menuButton) {
         CGFloat width = [self getWidthFromButton:self.menuButton];
@@ -833,11 +861,24 @@
         rightWidth += width;
     }
 
+
+    if (self.closeButton) {
+        CGFloat width = [self getWidthFromButton:self.closeButton];
+
+        if ([kThemeableBrowserAlignRight isEqualToString:_browserOptions.closeButton[kThemeableBrowserPropAlign]]) {
+            [rightButtons addObject:self.closeButton];
+            rightWidth += width;
+        } else {
+            [leftButtons addObject:self.closeButton];
+            leftWidth += width;
+        }
+    }
+
     NSArray* customButtons = _browserOptions.customButtons;
     if (customButtons) {
         NSInteger cnt = 0;
         // Reverse loop because we are laying out from outer to inner.
-        for (NSDictionary* customButton in [customButtons reverseObjectEnumerator]) {
+        for (NSDictionary* customButton in customButtons) {
             UIButton* button = [self createButton:customButton action:@selector(goCustomButton:) withDescription:[NSString stringWithFormat:@"custom button at %ld", (long)cnt]];
             if (button) {
                 button.tag = cnt;
@@ -858,6 +899,11 @@
     self.rightButtons = rightButtons;
     self.leftButtons = leftButtons;
 
+    NSInteger removeIndex = _browserOptions.isCollected ? 0 : 1;
+    if (self.rightButtons.count > 1) {
+        [self.rightButtons removeObjectAtIndex:removeIndex];
+    }
+
     for (UIButton* button in self.leftButtons) {
         [self.toolbar addSubview:button];
     }
@@ -866,17 +912,23 @@
         [self.toolbar addSubview:button];
     }
 
+
+    leftWidth += LEFT_BUTTON_SPACE * (self.leftButtons.count - 1);
+
     [self layoutButtons];
 
-    self.titleOffset = fmaxf(leftWidth, rightWidth);
+    self.titleOffset = fmaxf(leftWidth, rightWidth/2);
     // The correct positioning of title is not that important right now, since
     // rePositionViews will take care of it a bit later.
     self.titleLabel = nil;
     if (_browserOptions.title) {
-        self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 0, 10, toolbarHeight)];
+        self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, [self getStatusBarOffset], 10, toolbarHeight)];
         self.titleLabel.textAlignment = NSTextAlignmentCenter;
         self.titleLabel.numberOfLines = 1;
         self.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        self.titleLabel.userInteractionEnabled = NO;
+        self.titleLabel.font = [UIFont systemFontOfSize:TITLE_FONT_SIZE];
+//        self.titleLabel.font = [UIFont boldSystemFontOfSize:TITLE_FONT_SIZE]; 标题粗体
         self.titleLabel.textColor = [CDVThemeableBrowserViewController colorFromRGBA:[self getStringFromDict:_browserOptions.title withKey:kThemeableBrowserPropColor withDefault:@"#000000ff"]];
 
         if (_browserOptions.title[kThemeableBrowserPropStaticText]) {
@@ -890,6 +942,38 @@
     [self.view addSubview:self.toolbar];
     // [self.view addSubview:self.addressLabel];
     // [self.view addSubview:self.spinner];
+}
+
+
+- (void)changeCollectStaus:(BOOL)status{
+
+    NSMutableArray* customButtons = [NSMutableArray arrayWithArray:_browserOptions.customButtons];
+
+    BOOL removeIndex = status == YES ? 0 : 1;
+
+    if (customButtons.count > 1) {
+        [customButtons removeObjectAtIndex:removeIndex];
+    }
+
+    if (customButtons) {
+        NSInteger cnt = 0;
+        // Reverse loop because we are laying out from outer to inner.
+        for (NSDictionary* customButton in [customButtons reverseObjectEnumerator]) {
+            UIButton* button = [self createButton:customButton action:@selector(goCustomButton:) withDescription:[NSString stringWithFormat:@"custom button at %ld", (long)cnt]];
+            if (button) {
+                button.tag = cnt;
+                CGFloat width = [self getWidthFromButton:button];
+                if ([kThemeableBrowserAlignRight isEqualToString:customButton[kThemeableBrowserPropAlign]]) {
+                    [self.rightButtons removeAllObjects];
+                    [self.rightButtons addObject:button];
+                }
+            }
+            cnt += 1;
+        }
+    }
+
+    [self layoutButtons];
+
 }
 
 /**
@@ -997,20 +1081,27 @@
 - (void)layoutButtons
 {
     CGFloat screenWidth = CGRectGetWidth(self.view.frame);
-    CGFloat toolbarHeight = self.toolbar.frame.size.height;
+    CGFloat toolbarHeight = self.toolbar.frame.size.height - [self statusBarHeight];
 
     // Layout leftButtons and rightButtons from outer to inner.
-    CGFloat left = 0;
+    CGFloat left = LEFT_BUTTON_START_MARGIN; //button起始左边距
     for (UIButton* button in self.leftButtons) {
         CGSize size = button.frame.size;
-        button.frame = CGRectMake(left, floorf((toolbarHeight - size.height) / 2), size.width, size.height);
-        left += size.width;
+        CGFloat buttonY = (toolbarHeight - size.height) * 0.5 + [self statusBarHeight];
+        button.frame = CGRectMake(left, buttonY, size.width, size.height);
+        left += size.width + LEFT_BUTTON_SPACE;
     }
 
     CGFloat right = 0;
+
+    NSInteger removeIndex = _browserOptions.isCollected ? 0 : 1;
+    if (self.rightButtons.count > 1) {
+        [self.rightButtons removeObjectAtIndex:removeIndex];
+    }
+
     for (UIButton* button in self.rightButtons) {
         CGSize size = button.frame.size;
-        button.frame = CGRectMake(screenWidth - right - size.width, floorf((toolbarHeight - size.height) / 2), size.width, size.height);
+        button.frame = CGRectMake(screenWidth - right - size.width, floorf((toolbarHeight - size.height) / 2) + [self statusBarHeight], size.width, size.height);
         right += size.width;
     }
 }
@@ -1035,7 +1126,8 @@
 - (void)showLocationBar:(BOOL)show
 {
     CGRect locationbarFrame = self.addressLabel.frame;
-    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
+    CGFloat toolbarPercentValue = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT_PERCENT];
+    CGFloat toolbarHeight = [self getToolbarHeightWithPercentValue:toolbarPercentValue];
 
     BOOL toolbarVisible = !self.toolbar.hidden;
 
@@ -1092,7 +1184,8 @@
 {
     CGRect toolbarFrame = self.toolbar.frame;
     CGRect locationbarFrame = self.addressLabel.frame;
-    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
+    CGFloat toolbarPercentValue = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT_PERCENT];
+    CGFloat toolbarHeight = [self getToolbarHeightWithPercentValue:toolbarPercentValue];
 
     BOOL locationbarVisible = !self.addressLabel.hidden;
 
@@ -1328,6 +1421,11 @@
 // The height of it could be hardcoded as 20 pixels, but that would assume that the upcoming releases of iOS won't
 // change that value.
 //
+
+-(CGFloat)statusBarHeight{
+    return SCREEN_HEIGHT == 812 ? 44 : 20;
+}
+
 - (float) getStatusBarOffset {
     CGRect statusBarFrame = [[UIApplication sharedApplication] statusBarFrame];
     float statusBarOffset = IsAtLeastiOSVersion(@"7.0") ? MIN(statusBarFrame.size.width, statusBarFrame.size.height) : 0.0;
@@ -1335,21 +1433,27 @@
 }
 
 - (void) rePositionViews {
-    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
+    CGFloat toolbarPercentValue = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT_PERCENT];
+    CGFloat toolbarHeight = [self getToolbarHeightWithPercentValue:toolbarPercentValue];
     CGFloat webviewOffset = _browserOptions.fullscreen ? 0.0 : toolbarHeight;
 
     if ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop]) {
-        [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, webviewOffset, self.webView.frame.size.width, self.webView.frame.size.height)];
-        [self.toolbar setFrame:CGRectMake(self.toolbar.frame.origin.x, [self getStatusBarOffset], self.toolbar.frame.size.width, self.toolbar.frame.size.height)];
+//        [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, webviewOffset, self.webView.frame.size.width, self.webView.frame.size.height)];
+        [self.toolbar setFrame:CGRectMake(self.toolbar.frame.origin.x, 0, self.toolbar.frame.size.width, self.toolbar.frame.size.height)];
     }
 
     CGFloat screenWidth = CGRectGetWidth(self.view.frame);
     NSInteger width = floorf(screenWidth - self.titleOffset * 2.0f);
     if (self.titleLabel) {
-        self.titleLabel.frame = CGRectMake(floorf((screenWidth - width) / 2.0f), 0, width, toolbarHeight);
+        self.titleLabel.frame = CGRectMake(floorf((screenWidth - width) / 2.0f) + TITLELBL_LEFT_OFFSET, [self statusBarHeight], width - TITLELBL_LEFT_OFFSET, toolbarHeight);
     }
 
     [self layoutButtons];
+}
+
+- (CGFloat)getToolbarHeightWithPercentValue:(CGFloat)percentValue{
+
+    return SCREEN_WIDTH * percentValue/100.0;
 }
 
 - (CGFloat) getFloatFromDict:(NSDictionary*)dict withKey:(NSString*)key withDefault:(CGFloat)def
@@ -1396,7 +1500,11 @@
         if (event) {
             NSMutableDictionary* dict = [NSMutableDictionary new];
             [dict setObject:event forKey:@"type"];
-            [dict setObject:[self.navigationDelegate.themeableBrowserViewController.currentURL absoluteString] forKey:@"url"];
+
+            if (self.navigationDelegate.themeableBrowserViewController.currentURL != nil) {
+                [dict setObject:[self.navigationDelegate.themeableBrowserViewController.currentURL absoluteString] forKey:@"url"];
+            }
+
 
             if (index) {
                 [dict setObject:index forKey:@"index"];

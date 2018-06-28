@@ -57,6 +57,7 @@
 @property (nonatomic) BOOL backButtonCanClose;
 @property (nonatomic) BOOL disableAnimation;
 @property (nonatomic) BOOL fullscreen;
+@property (nonatomic) BOOL isCollected;
 
 @end
 
@@ -77,6 +78,7 @@
 - (void)show:(CDVInvokedUrlCommand*)command;
 - (void)show:(CDVInvokedUrlCommand*)command withAnimation:(BOOL)animated;
 - (void)reload:(CDVInvokedUrlCommand*)command;
+- (void)setCollectStatus:(CDVInvokedUrlCommand *)command;
 
 @end
 
@@ -107,7 +109,7 @@
 @property (nonatomic, strong) IBOutlet UIView* toolbar;
 
 @property (nonatomic, strong) NSArray* leftButtons;
-@property (nonatomic, strong) NSArray* rightButtons;
+@property (nonatomic, strong) NSMutableArray* rightButtons;
 
 @property (nonatomic, weak) id <CDVScreenOrientationDelegate> orientationDelegate;
 @property (nonatomic, weak) CDVThemeableBrowser* navigationDelegate;
@@ -120,6 +122,7 @@
 - (void)showLocationBar:(BOOL)show;
 - (void)showToolBar:(BOOL)show : (NSString*) toolbarPosition;
 - (void)setCloseButtonTitle:(NSString*)title;
+- (void)changeCollectStaus:(BOOL)status;
 
 - (id)initWithUserAgent:(NSString*)userAgent prevUserAgent:(NSString*)prevUserAgent browserOptions: (CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle;
 
